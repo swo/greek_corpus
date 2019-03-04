@@ -105,8 +105,12 @@ if __name__ == '__main__':
 
     missing_definitions = [x for x in clean_headwords if not good_headword(x, supplemental_definitions)]
     if len(missing_definitions) > 0:
-        print("Missing definitions must be manually defined:")
-        print('\n'.join([x['word'] for x in missing_definitions]))
+        print("{} missing definitions must be manually defined".format(len(missing_definitions)))
+        with open('missing_words.txt', 'w') as f:
+            for x in missing_definitions:
+                print(x['word'], file=f)
+
+        print("Words written to missing_words.txt")
 
     with open('anki.tsv', 'w') as f:
         for headword in good_headwords:

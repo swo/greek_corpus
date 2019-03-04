@@ -3,7 +3,7 @@
 # This script searches for definitions for those words already in the
 # database.
 
-import wiktionaryparser
+import wiktionaryparser, multiprocessing
 from tinydb import TinyDB, Query
 
 # for fetching wiktionary pages
@@ -17,29 +17,25 @@ def fetch_entry(word):
 
     return result
 
-# def fetch_definition(word):
-#     result = parser.fetch(word, 'greek')
+def add_entry(word, db, query):
+    print(word)
+    wiki = fetch_entry(word)
+    print(wiki)
+    db.update({'wiktionary_entry': wiki}, query.word == word)
+    print('updated')
+    print()
 
-#     if not (len(result) == 1 and 'definitions' in result[0]):
-#         return 'bad length result'
-
-#     definitions = result[0]['definitions']
-#     texts = [x['text'] for x in definitions]
-
-#     return '\n\n'.join(['\n'.join(x) for x in texts])
+    return (word, wiki)
 
 
 if __name__ == '__main__':
     db = TinyDB('db.json')
     query = Query()
 
-    for record in db:
-        if 'wiktionary_entry' not in record:
-            word = record['word']
-            print(word)
+    words_to_fetch = [x['word'] for x in db.all() if 'wiktionary_entry' not in x]
 
-            entry = fetch_entry(word)
-            print(entry)
+    def f(x):
+        add_entry(x, db, query)
 
-            db.update({'wiktionary_entry': entry}, query.word == word)
-            print()
+    with multiprocessing.Pool(5) as pool:
+        pool.map(f, words_to_fetch)
