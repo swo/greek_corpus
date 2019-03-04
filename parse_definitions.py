@@ -47,22 +47,30 @@ def useless_text(x):
 
     return False
 
-def bad_headword(r):
+def good_headword(r, supplemental_definitions):
+    if r['word'] in supplemental_definitions:
+        return True
+
     # missing homonyms?
     if r['homonyms'] is None or r['homonyms'] == []:
-        return True
+        return False
 
     # just empty definitions?
     empty_def = any([len(h['definitions']) == 0 for h in r['homonyms']])
     nonempty_def = any([len(h['definitions']) > 0 for h in r['homonyms']])
 
     if empty_def and not nonempty_def:
-        return True
+        return False
 
-    return False
+    return True
 
-def ankiize_headword(x):
-    return "<br><br>".join([ankiize_homonym(h, x['word']) for h in x['homonyms']])
+def ankiize_headword(x, supplemental_definitions):
+    word = x['word']
+
+    if word in supplemental_definitions:
+        return supplemental_definitions[word]
+
+    return "<br><br>".join([ankiize_homonym(h, word) for h in x['homonyms']])
 
 def ankiize_homonym(homonym, word):
     if homonym['part_of_speech'] == 'noun':
@@ -80,18 +88,26 @@ def ankiize_homonym(homonym, word):
 
 
 if __name__ == '__main__':
+    # load up DB
     db = TinyDB('db.json')
     query = Query()
 
-    headwords = [x for x in db.all() if 'wiktionary_entry' in x]
-    clean_headwords = [clean_headword(x) for x in headwords]
-    bad_headwords = [x for x in clean_headwords if bad_headword(x)]
-    good_headwords = sorted([x for x in clean_headwords if not bad_headword(x)], key=lambda x: x['frequency'], reverse=True)
+    # load up supplemental definitions
+    supplemental_definitions = {}
+    with open('supplemental_definitions.tsv') as f:
+        for line in f:
+            word, definition = line.rstrip().split('\t')
+            supplemental_definitions[word] = definition
 
-    with open('bad_words.txt', 'w') as f:
-        for hw in bad_headwords:
-            print(hw['word'], file=f)
+    headwords = sorted([x for x in db.all() if 'wiktionary_entry' in x], key=lambda x: x['frequency'], reverse=True)
+    clean_headwords = [clean_headword(x) for x in headwords]
+    good_headwords = [x for x in clean_headwords if good_headword(x, supplemental_definitions)]
+
+    missing_definitions = [x for x in clean_headwords if not good_headword(x, supplemental_definitions)]
+    if len(missing_definitions) > 0:
+        print("Missing definitions must be manually defined:")
+        print('\n'.join([x['word'] for x in missing_definitions]))
 
     with open('anki.tsv', 'w') as f:
         for headword in good_headwords:
-            print(headword['word'], ankiize_headword(headword), sep='\t', file=f)
+            print(headword['word'], ankiize_headword(headword, supplemental_definitions), sep='\t', file=f)
