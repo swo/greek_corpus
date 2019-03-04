@@ -9,16 +9,24 @@ from tinydb import TinyDB, Query
 # for fetching wiktionary pages
 parser = wiktionaryparser.WiktionaryParser()
 
-def fetch_definition(word):
-    result = parser.fetch(word, 'greek')
+def fetch_entry(word):
+    try:
+        result = parser.fetch(word, 'greek')
+    except Exception:
+        result = None
 
-    if not (len(result) == 1 and 'definitions' in result[0]):
-        return 'bad length result'
+    return result
 
-    definitions = result[0]['definitions']
-    texts = [x['text'] for x in definitions]
+# def fetch_definition(word):
+#     result = parser.fetch(word, 'greek')
 
-    return '\n\n'.join(['\n'.join(x) for x in texts])
+#     if not (len(result) == 1 and 'definitions' in result[0]):
+#         return 'bad length result'
+
+#     definitions = result[0]['definitions']
+#     texts = [x['text'] for x in definitions]
+
+#     return '\n\n'.join(['\n'.join(x) for x in texts])
 
 
 if __name__ == '__main__':
@@ -26,15 +34,12 @@ if __name__ == '__main__':
     query = Query()
 
     for record in db:
-        if 'definition' not in record:
+        if 'wiktionary_entry' not in record:
             word = record['word']
+            print(word)
 
-            try:
-                definition = fetch_definition(word)
-            except:
-                definition = 'bad definition'
+            entry = fetch_entry(word)
+            print(entry)
 
-            print(definition)
-
-            db.update({'definition': definition}, query.word == word)
-            print('\n---\n')
+            db.update({'wiktionary_entry': entry}, query.word == word)
+            print()
