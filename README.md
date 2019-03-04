@@ -21,3 +21,10 @@ flashcard app.
 - `parse_html.py` turns the html files in `raw/` into database entries
 - `fetch_definitions.py` populates the database with Wiktionary definitions
 - `make_anki_tsv.py` translates the database into the Anki-ready file
+
+## Alternative data sources
+
+I considered but did not ultimately pursue scraping a Greek-English dictionary
+website (e.g., [dict.com](www.dict.com) or [Word Reference](wordreference.com))
+in part because of the difficulty in reliably parsing the pages and also
+because of licensing concerns.
