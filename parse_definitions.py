@@ -107,6 +107,10 @@ if __name__ == '__main__':
 
     rows = list(cursor.execute('''select word, wiki from lemmas where wiki is not null order by frequency desc'''))
 
+    with open('words.txt', 'w') as f:
+        for row in rows:
+            print(row[0], file=f)
+
     words = [Word(x[0], x[1], supplemental_definitions) for x in rows if x[0] not in words_to_skip]
 
     # look for dropped words
