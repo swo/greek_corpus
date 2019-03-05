@@ -21,7 +21,6 @@ def add_entry(word, connection):
     wiki_str = json.dumps(wiki)
 
     print(word, wiki)
-    print()
 
     cursor = connection.cursor()
     cursor.execute('''update lemmas set wiki = ? where word = ?''', (wiki_str, word))
