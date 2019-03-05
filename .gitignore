@@ -1,1 +1,3 @@
 *.html
+old/
+__pycache__/

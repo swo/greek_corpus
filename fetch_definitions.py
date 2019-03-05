@@ -3,8 +3,7 @@
 # This script searches for definitions for those words already in the
 # database.
 
-import wiktionaryparser, multiprocessing
-from tinydb import TinyDB, Query
+import wiktionaryparser, multiprocessing, sqlite3, json
 
 # for fetching wiktionary pages
 parser = wiktionaryparser.WiktionaryParser()
@@ -17,25 +16,35 @@ def fetch_entry(word):
 
     return result
 
-def add_entry(word, db, query):
-    print(word)
+def add_entry(word, connection):
     wiki = fetch_entry(word)
-    print(wiki)
-    db.update({'wiktionary_entry': wiki}, query.word == word)
-    print('updated')
+    wiki_str = json.dumps(wiki)
+
+    print(word, wiki)
     print()
+
+    cursor = connection.cursor()
+    cursor.execute('''update lemmas set wiki = ? where word = ?''', (wiki_str, word))
+
+    connection.commit()
 
     return (word, wiki)
 
 
 if __name__ == '__main__':
-    db = TinyDB('db.json')
-    query = Query()
+    connection = sqlite3.connect('greek_db')
+    cursor = connection.cursor()
 
-    words_to_fetch = [x['word'] for x in db.all() if 'wiktionary_entry' not in x]
+    known_words = [x[0] for x in cursor.execute('''select word from lemmas where wiki is not null''')]
+    words_to_fetch = [x[0] for x in cursor.execute('''select word from lemmas where wiki is null''')]
+
+    print("There are {} words with wiki entries and {} left to fetch".format(len(known_words), len(words_to_fetch)))
 
     def f(x):
-        add_entry(x, db, query)
+        add_entry(x, connection)
 
     with multiprocessing.Pool(5) as pool:
         pool.map(f, words_to_fetch)
+
+    connection.commit()
+    connection.close()

@@ -1,3 +1,7 @@
+**To do**:
+
+- Revamp tsv writer in terms of objects, so that all the functionality gets wrapped into each group of words
+
 # Most common Greek words
 
 I pulled lists of the most common Greek words appearing in a corpus of web

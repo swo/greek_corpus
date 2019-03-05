@@ -2,116 +2,120 @@
 #
 # This script searches for definitions for those words already in the database.
 #
-# Each wiktionary entry is for a single headword and consists of a list of
-# etymologies, which in turn can contain multiple definitions. I put the
-# definitions from all etymologies together.
+# - Each wiktionary entry is for one headword
+# - Each headword can have multiple etymologies
+# - Each etymology can have multiple definitions
+# - Each definition can have multiple "texts"
+#
+# So if x is the entry for "με":
+# x[0]['definitions'][0]['text'][0] is
+# first etymology, list of definitions, first definition, list of definition texts, first definition text
 
-import re
-from tinydb import TinyDB, Query
+import re, sqlite3, json
 
-def clean_headword(headword):
-    etymologies = headword['wiktionary_entry']
+class Word:
+    def __init__(self, word, raw_wiki, supplemental_definitions):
+        self.word = word
+        self.wiki = json.loads(raw_wiki)
 
-    if etymologies is None:
-        homonyms = None
-    else:
-        homonyms = [clean_definition(definition) for etymology in etymologies for definition in etymology['definitions']]
-
-    return {'word': headword['word'], 'homonyms': homonyms, 'frequency': int(headword['frequency'])}
-
-def clean_definition(definition):
-    part_of_speech = definition['partOfSpeech']
-    first_text = definition['text'][0]
-    other_texts = [x for x in definition['text'][1:] if not useless_text(x)]
-
-    result = {'part_of_speech': part_of_speech, 'definitions': other_texts}
-
-    # add gender for nouns, and also plural form is mentioned
-    if part_of_speech == 'noun':
-        m = re.match('(.+) • \(([^\(\)]+)\)\xa0([mfn ,]+)', first_text)
-        word, pronunciation, gender = m.groups()
-        gender = gender.rstrip()
-        result.update({'gender': gender})
-
-        if 'plural' in first_text:
-            m = re.search('\(plural (.+)\)', first_text)
-            assert m is not None
-            result.update({'plural': m.groups()[0]})
-
-    return result
-
-def useless_text(x):
-    if '\xa0' in x:
-        assert ('form of' in x) or ('(dated)' in x)
-        return True
-
-    return False
-
-def good_headword(r, supplemental_definitions):
-    if r['word'] in supplemental_definitions:
-        return True
-
-    # missing homonyms?
-    if r['homonyms'] is None or r['homonyms'] == []:
-        return False
-
-    # just empty definitions?
-    empty_def = any([len(h['definitions']) == 0 for h in r['homonyms']])
-    nonempty_def = any([len(h['definitions']) > 0 for h in r['homonyms']])
-
-    if empty_def and not nonempty_def:
-        return False
-
-    return True
-
-def ankiize_headword(x, supplemental_definitions):
-    word = x['word']
-
-    if word in supplemental_definitions:
-        return supplemental_definitions[word]
-
-    return "<br><br>".join([ankiize_homonym(h, word) for h in x['homonyms']])
-
-def ankiize_homonym(homonym, word):
-    if homonym['part_of_speech'] == 'noun':
-        assert 'gender' in homonym
-        if 'plural' in homonym:
-            first_line = "{} noun {} (plural {})".format(word, homonym['gender'], homonym['plural'])
+        if self.word in supplemental_definitions:
+            # don't parse, just look in the manually-entered data
+            self.keep = True
+            self.anki = supplemental_definitions[self.word]
         else:
-            first_line = "{} noun {}".format(word, homonym['gender'])
-    else:
-        first_line = "{} {}".format(word, homonym['part_of_speech'])
+            if self.wiki is None:
+                # drop if no wiki data
+                self.keep = False
+            else:
+                self.definitions = [Definition(self.word, x) for etymology in self.wiki for x in etymology['definitions']]
 
-    lines = [first_line] + homonym['definitions']
+                if len([x for x in self.definitions if x.keep]) > 0:
+                    self.keep = True
+                    self.anki = self.ankiize()
+                else:
+                    self.keep = False
 
-    return "<br>".join(lines)
+    def ankiize(self):
+        return "<br><br>".join([x.anki for x in self.definitions if x.keep])
+
+
+class Definition:
+    def __init__(self, word, definition):
+        self.word = word
+        self.part_of_speech = definition['partOfSpeech']
+
+        if self.part_of_speech in ['numeral', 'letter']:
+            self.keep = False
+        else:
+            self.texts = self.clean_texts(definition['text'])
+
+        if self.keep:
+            self.anki = self.ankiize()
+
+    @staticmethod
+    def useless_text(x):
+        return ('dated' in x) or (x.startswith('form of'))
+
+    def clean_texts(self, texts):
+        texts = [x for x in texts if not self.useless_text(x)]
+        # print('*texts*', texts)
+
+        if len(texts) == 0:
+            self.keep = False
+            return None
+
+        first_text = texts[0]
+
+        if '•' not in first_text:
+            self.keep = False
+            return None
+
+        m = re.match("(?P<word>.+)\s+•\s+\((?P<pronunciation>.+)\)\s*(?P<rest>.*)", first_text)
+        if m is None:
+            raise RuntimeError('unparsed definition:', self.word, first_text, other_texts)
+
+        self.first_text_rest = m.groupdict()['rest']
+        self.other_texts = [re.sub('\s+', ' ', x) for x in texts[1:]]
+        self.keep = True
+
+    def ankiize(self):
+        # print([self.word, self.part_of_speech, self.first_text_rest, self.texts])
+        first_line = "{} {}".format(self.word, self.part_of_speech)
+
+        if self.first_text_rest != '':
+            first_line += self.first_text_rest
+
+        lines = [first_line] + self.other_texts
+        return "<br>".join(lines)
 
 
 if __name__ == '__main__':
     # load up DB
-    db = TinyDB('db.json')
-    query = Query()
+    connection = sqlite3.connect('greek_db')
+    cursor = connection.cursor()
+
+    # load up words to skip
+    with open('words_to_skip.txt') as f:
+        words_to_skip = [line.rstrip() for line in f]
 
     # load up supplemental definitions
     supplemental_definitions = {}
     with open('supplemental_definitions.tsv') as f:
         for line in f:
-            word, definition = line.rstrip().split('\t')
-            supplemental_definitions[word] = definition
+            old_word, new_word, anki = line.rstrip().split('\t')
+            supplemental_definitions[old_word] = {'new_word': new_word, 'anki': anki}
 
-    headwords = sorted([x for x in db.all() if 'wiktionary_entry' in x], key=lambda x: x['frequency'], reverse=True)
-    clean_headwords = [clean_headword(x) for x in headwords]
-    good_headwords = [x for x in clean_headwords if good_headword(x, supplemental_definitions)]
+    rows = list(cursor.execute('''select word, wiki from lemmas where wiki is not null order by frequency desc'''))
 
-    missing_definitions = [x for x in clean_headwords if not good_headword(x, supplemental_definitions)]
-    if len(missing_definitions) > 0:
-        print("{} missing definitions must be manually defined".format(len(missing_definitions)))
-        with open('missing_words.txt', 'w') as f:
-            for x in missing_definitions:
-                print(x['word'], file=f)
+    words = [Word(x[0], x[1], supplemental_definitions) for x in rows if x[0] not in words_to_skip]
 
-        print("Words written to missing_words.txt")
+    # look for dropped words
+    dropped_words = [x for x in words if not x.keep]
+    with open('dropped_words.txt', 'w') as f:
+        for x in dropped_words:
+            print(x.word, file=f)
 
     with open('anki.tsv', 'w') as f:
-        for headword in good_headwords:
-            print(headword['word'], ankiize_headword(headword, supplemental_definitions), sep='\t', file=f)
+        for word in words:
+            if word.keep:
+                print(word.word, word.anki, sep='\t', file=f)

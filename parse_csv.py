@@ -3,8 +3,7 @@
 # This script parses the csv frequency lists downloaded from TenTen and
 # uses them to populate the database.
 
-import glob, re, functools, csv
-from tinydb import TinyDB, Query
+import glob, re, functools, csv, sqlite3, os.path
 
 class Lemma:
     def __init__(self, word, frequency):
@@ -12,51 +11,59 @@ class Lemma:
         self.frequency = frequency
 
     def __eq__(self, other):
-        return (self.word, self.frequency) == (other.word, other.frequency)
-
-    def __lt__(self, other):
-        return self.frequency < other.frequency or (self.frequency == other.frequency and self.word < other.word)
+        return self.word == other.word and self.frequency == other.frequency
 
     def __repr__(self):
         return self.word
 
-
 def load_word_list(fn):
     with open(fn, newline='') as f:
         reader = csv.reader(f)
-        rows = [x for x in reader]
+        rows = [tuple(x) for x in reader]
 
-    assert rows[2] == ['lemma_lc', 'Freq']
+    assert rows[2] == ('lemma_lc', 'Freq')
+    rows = rows[3:]
 
-    words, frequencies = zip(*rows[3:])
+    return rows
+
+def load_word_lists(fns):
+    rows = [row for fn in fns for row in load_word_list(fn)]
+
+    # remove duplicates
+    rows = set(rows)
+
+    # lemmatize
+
+    words, frequencies = zip(*rows)
     frequencies = [int(re.sub(',', '', x)) for x in frequencies]
 
     lemmas = [Lemma(w, f) for w, f in zip(words, frequencies)]
 
     return lemmas
 
-def run_on_file(fn, func):
-    with open(fn) as f:
-        content = f.read()
-
-    return(func(content))
 
 if __name__ == '__main__':
     fns = glob.glob('raw/*.csv')
-    lemmas = sorted([x for fn in fns for x in load_word_list(fn)], reverse=True)
 
-    db = TinyDB('db.json')
-    Entry = Query()
+    lemmas = load_word_lists(fns)
 
-    # find which words we need to add to the database
-    csv_words = set([x.word for x in lemmas])
-    db_words = set([x['word'] for x in iter(db)])
-    words_to_add = csv_words - db_words
-    lemmas_to_add = [lemma for lemma in lemmas if lemma.word in words_to_add]
+    # check that there are no duplicates
+    words = [lemma.word for lemma in lemmas]
+    duplicated_words = set([x for x in words if words.count(x) > 1])
+    if len(duplicated_words) > 0:
+        raise RuntimeError("Duplicated words in lemma list: {}".format(duplicated_words))
 
-    for lemma in lemmas_to_add:
-        db.insert({'word': lemma.word, 'frequency': lemma.frequency})
+    db_fn = 'greek_db'
+    if os.path.isfile(db_fn):
+        raise RuntimeError("Database '{}' already exists".format(db_fn))
 
-    with open('words.txt', 'w') as f:
-        for lemma in lemmas:
-            print(lemma, file=f)
+    connection = sqlite3.connect(db_fn)
+    cursor = connection.cursor()
+    cursor.execute('''create table lemmas (word text, frequency int, wiki text)''')
+    connection.commit()
+
+    for lemma in lemmas:
+        cursor.execute('''insert into lemmas (word, frequency) values (?, ?)''', (lemma.word, lemma.frequency))
+
+    connection.commit()
+    connection.close()
