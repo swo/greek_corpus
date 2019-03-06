@@ -11,7 +11,7 @@
 # x[0]['definitions'][0]['text'][0] is
 # first etymology, list of definitions, first definition, list of definition texts, first definition text
 
-import re, sqlite3, json
+import re, sqlite3, json, yaml
 
 class Word:
     def __init__(self, word, raw_wiki, supplemental_definitions):
@@ -20,8 +20,10 @@ class Word:
 
         if self.word in supplemental_definitions:
             # don't parse, just look in the manually-entered data
+            self.anki = supplemental_definitions[self.word]['anki']
+            # change the word to the new display
+            self.word = supplemental_definitions[self.word]['new_word']
             self.keep = True
-            self.anki = supplemental_definitions[self.word]
         else:
             if self.wiki is None:
                 # drop if no wiki data
@@ -89,6 +91,19 @@ class Definition:
         return "<br>".join(lines)
 
 
+def load_supplemental_definitions(fn):
+    with open(fn) as f:
+        defs = yaml.load(f)
+
+    for word, data in defs.items():
+        if 'new_word' not in data:
+            data['new_word'] = word
+
+        data['anki'] = data['new_word'] + " " + re.sub(";", "<br>", data['def'])
+
+    return defs
+
+
 if __name__ == '__main__':
     # load up DB
     connection = sqlite3.connect('greek_db')
@@ -99,11 +114,7 @@ if __name__ == '__main__':
         words_to_skip = [line.rstrip() for line in f]
 
     # load up supplemental definitions
-    supplemental_definitions = {}
-    with open('supplemental_definitions.tsv') as f:
-        for line in f:
-            old_word, new_word, anki = line.rstrip().split('\t')
-            supplemental_definitions[old_word] = {'new_word': new_word, 'anki': anki}
+    supplemental_definitions = load_supplemental_definitions('supplemental_definitions.yaml')
 
     rows = list(cursor.execute('''select word, wiki from lemmas where wiki is not null order by frequency desc'''))
 

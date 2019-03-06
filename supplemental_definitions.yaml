@@ -1,0 +1,41 @@
+να:
+    def: particle;forms subjunctive;forms gerund;;να interjection;Lo!
+θα:
+    def: particle;forms future tenses
+δεν:
+    new_word: δε(ν)
+    def: particle;not (with indicative verbs)
+μην:
+    new_word: μη(ν)
+    def: particle;not (with subjunctive verbs)
+δύο:
+    def: two
+τρεις:
+    def: three
+δεη:
+    new_word: ΔΕΗ
+    def: acronym;Δημόσια Επιχείρηση Ηλεκτρισμού;Public Power Company;Greece's largest electric company
+λονδίνο:
+    new_word: Λονδίνο
+    def: noun n;London
+αιγαίο:
+    new_word: Αιγαίο
+    def: noun n;Aegean Sea
+ελλάς:
+    new_word: Ελλάς
+    def: noun f;Greece
+δημόσιος:
+    def: adj;public
+πολίτης:
+    def: noun m (pl πολιτές, f πολίτις);citizen;civilian (not in the church or army)
+αθήνα:
+    new_word: Αθήνα
+    def: noun f;Athens
+έλληνας:
+    new_word: Έλληνας
+    def: noun m (pl Έλληνες, f Ελληνίδα);a Greek person
+πρόκειται:
+    def: για(impersonal);it's about;;πρόκειται να;be going to;are probably going to
+ζώ:
+    new_word: ζω
+    def: (έζησα);live;(figurate) live on, endure;(transitive) support, sustain
